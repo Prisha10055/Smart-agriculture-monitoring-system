@@ -14,3 +14,4 @@ This project solves these issues by establishing a continuous, automated cyber-p
 - **Live Cloud Synchronization:** Connects via standard network protocols to stream time-series sensor logs to an online dashboard every 15 seconds.
 
 ## 🎛️ System Architecture
+Check it out on : https://wokwi.com/projects/466735336221478913
