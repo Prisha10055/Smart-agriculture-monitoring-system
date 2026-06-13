@@ -1,0 +1,85 @@
+#include <WiFi.h>
+#include "DHT.h"
+#include "ThingSpeak.h"
+
+#define DHTPIN 4
+#define DHTTYPE DHT22
+#define SOIL_PIN 34
+#define PUMP_PIN 25
+
+// ThingSpeak Configuration Settings
+unsigned long myChannelNumber = 2222222; // <-- REPLACE with your actual Channel ID from Step 2
+const char * myWriteAPIKey = "YOUR_KEY"; // <-- REPLACE with your actual Write API Key from Step 2
+
+// Wokwi provides an open virtual internet network automatically
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
+
+DHT dht(DHTPIN, DHTTYPE);
+WiFiClient client;
+
+unsigned long lastTime = 0;
+const unsigned long timerDelay = 15000; // Sends data every 15 seconds
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(PUMP_PIN, OUTPUT);
+  digitalWrite(PUMP_PIN, LOW); // Start with pump turned OFF
+  
+  dht.begin();
+  
+  Serial.print("Connecting to Virtual Wi-Fi network...");
+  WiFi.begin(ssid, password);
+  while(WiFi.status() != WL_CONNECTED){
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nSuccessfully connected to the internet!");
+  
+  ThingSpeak.begin(client);
+}
+
+void loop() {
+  if ((millis() - lastTime) > timerDelay) {
+    lastTime = millis();
+    
+    // Read parameters from our virtual farm sensors
+    float temp = dht.readTemperature();
+    int rawSoilValue = analogRead(SOIL_PIN);
+    float moisturePercentage = map(rawSoilValue, 0, 4095, 0, 100); // Converts data to 0-100%
+
+    // Stop execution if the sensor fails to read
+    if (isnan(temp)) {
+      Serial.println("Error: Cannot read temperature sensor data!");
+      return;
+    }
+
+    // Smart Automation: If soil moisture is dry (below 35%), turn on the pump LED
+    int pumpActive = 0;
+    if(moisturePercentage < 35.0) {
+      digitalWrite(PUMP_PIN, HIGH); // LED turns ON
+      pumpActive = 1;
+      Serial.println("[ALERT] Soil moisture is low! Turning ON the water pump.");
+    } else {
+      digitalWrite(PUMP_PIN, LOW);  // LED turns OFF
+      pumpActive = 0;
+      Serial.println("[INFO] Soil moisture is healthy. Pump is OFF.");
+    }
+
+    // Print values on your screen console terminal
+    Serial.print("Farm Status -> Temperature: "); Serial.print(temp);
+    Serial.print("°C | Soil Moisture: "); Serial.print(moisturePercentage);
+    Serial.print("% | Pump Running: "); Serial.println(pumpActive ? "YES" : "NO");
+
+    // Send the live sensor numbers out to your ThingSpeak Dashboard channel
+    ThingSpeak.setField(1, temp);
+    ThingSpeak.setField(2, moisturePercentage);
+    
+    int response = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
+    if(response == 200){
+      Serial.println("[CLOUD] Data uploaded to dashboard successfully.");
+    } else {
+      Serial.println("[CLOUD] Upload failed. Error code: " + String(response));
+    }
+  }
+}
